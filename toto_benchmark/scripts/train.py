@@ -80,7 +80,7 @@ def main(cfg : DictConfig) -> None:
     train_loader = DataLoader(train_set, batch_size=cfg.training.batch_size, \
                               shuffle=True, num_workers=num_workers, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=cfg.training.batch_size)
-    agent, _ = init_agent_from_config(cfg, cfg.training.device, normalization=dset)
+    agent = init_agent_from_config(cfg, cfg.training.device, normalization=dset)
     train_metric, test_metric = baselines.Metric(), baselines.Metric()
 
     for epoch in range(cfg.training.epochs):
