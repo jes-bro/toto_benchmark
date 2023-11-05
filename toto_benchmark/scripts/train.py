@@ -20,6 +20,7 @@ import wandb
 import baselines
 import toto_benchmark
 from toto_benchmark.agents import init_agent_from_config
+from toto_benchmark.agents.CollaboratorAgent import CollaboratorAgent
 from toto_benchmark.vision import EMBEDDING_DIMS
 from dataset_traj import FrankaDatasetTraj
 from toto_benchmark.sim.eval_agent import eval_agent, create_agent_predict_fn
@@ -80,8 +81,10 @@ def main(cfg : DictConfig) -> None:
     train_loader = DataLoader(train_set, batch_size=cfg.training.batch_size, \
                               shuffle=True, num_workers=num_workers, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=cfg.training.batch_size)
-    agent = init_agent_from_config(cfg, cfg.training.device, normalization=dset)
+    #agent, _ = init_agent_from_config(cfg, cfg.training.device, normalization=dset)
     train_metric, test_metric = baselines.Metric(), baselines.Metric()
+
+    ensemble_agent = CollaboratorAgent(num_agents=5, cfg=cfg)
 
     for epoch in range(cfg.training.epochs):
         acc_loss = 0.
@@ -91,31 +94,31 @@ def main(cfg : DictConfig) -> None:
         for data in train_loader:
             for key in data:
                 data[key] = data[key].to(cfg.training.device)
-            agent.train(data)
-            acc_loss += agent.loss
-            train_metric.add(agent.loss.item())
-            print('epoch {} \t batch {} \t train {:.6f}'.format(epoch, batch, agent.loss.item()), end='\r')
+            ensemble_agent.train(data)
+            acc_loss += ensemble_agent.loss
+            train_metric.add(ensemble_agent.loss.item())
+            print('epoch {} \t batch {} \t train {:.6f}'.format(epoch, batch, ensemble_agent.loss.item()), end='\r')
             batch += 1
 
         for data in test_loader:
             for key in data:
                 data[key] = data[key].to(cfg.training.device)
-            test_metric.add(agent.eval(data))
+            test_metric.add(ensemble_agent.evaluate(data))
 
         log.info('epoch {} \t train {:.6f} \t test {:.6f}'.format(epoch, train_metric.mean, test_metric.mean))
         log.info(f'Accumulated loss: {acc_loss}')
         if epoch % cfg.training.save_every_x_epoch == 0:
-            agent.save(os.getcwd())
+            ensemble_agent.save(os.getcwd())
 
         wandb.log({"Train Loss": train_metric.mean, "Epoch": epoch})
         wandb.log({"Test Loss": test_metric.mean, "Epoch": epoch})
         wandb.log({"Acc Train Loss": acc_loss, "Epoch": epoch})
 
-    agent.save(os.getcwd())
+    ensemble_agent.save(os.getcwd())
 
     if cfg.data.sim:
         # Evaluate the simulation agent online
-        eval_agent(create_agent_predict_fn(agent, cfg))
+        eval_agent(create_agent_predict_fn(ensemble_agent, cfg))
 
     log.info("Saved agent to {}".format(os.getcwd()))
 
